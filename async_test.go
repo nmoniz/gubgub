@@ -107,6 +107,34 @@ func TestAsyncTopic_WithOnClose(t *testing.T) {
 	}
 }
 
+func TestAsyncTopic_WithOnSubscribe(t *testing.T) {
+	const totalSub = 10
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
+	feedback := make(chan int, totalSub)
+	defer close(feedback)
+
+	topic := NewAsyncTopic[int](ctx, WithOnSubscribe(func(count int) { feedback <- count }))
+
+	for range totalSub {
+		topic.Subscribe(func(i int) bool { return true })
+	}
+
+	count := 0
+	for count < totalSub {
+		select {
+		case c := <-feedback:
+			count++
+			assert.Equal(t, count, c, "expected %d but got %d instead", count, c)
+
+		case <-time.After(time.Second):
+			t.Fatalf("expected %d feedback items by now but only got %d", totalSub, count)
+		}
+	}
+}
+
 func TestAsyncTopic_SubscribeClosedTopicError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

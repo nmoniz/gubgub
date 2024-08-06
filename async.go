@@ -20,7 +20,8 @@ type AsyncTopic[T any] struct {
 // NewAsyncTopic creates a Topic that publishes messages asynchronously.
 func NewAsyncTopic[T any](ctx context.Context, opts ...AsyncTopicOption) *AsyncTopic[T] {
 	options := AsyncTopicOptions{
-		onClose: func() {},
+		onClose:     func() {},
+		onSubscribe: func(count int) {},
 	}
 
 	for _, opt := range opts {
@@ -52,6 +53,7 @@ func (t *AsyncTopic[T]) run(ctx context.Context) {
 
 		case newCallback := <-t.subscribeCh:
 			subscribers = append(subscribers, newCallback)
+			t.options.onSubscribe(len(subscribers))
 
 		case msg := <-t.publishCh:
 			keepers := make([]Subscriber[T], 0, len(subscribers))
@@ -88,7 +90,6 @@ func (t *AsyncTopic[T]) Subscribe(fn Subscriber[T]) error {
 
 	if t.closed {
 		return fmt.Errorf("async topic subscribe: %w", ErrTopicClosed)
-		//	return nil
 	}
 
 	t.subscribeCh <- fn
@@ -104,13 +105,20 @@ func (t *AsyncTopic[T]) close() {
 }
 
 type AsyncTopicOptions struct {
-	onClose func()
+	onClose     func()
+	onSubscribe func(count int)
 }
 
 type AsyncTopicOption func(*AsyncTopicOptions)
 
 func WithOnClose(fn func()) AsyncTopicOption {
-	return func(a *AsyncTopicOptions) {
-		a.onClose = fn
+	return func(opts *AsyncTopicOptions) {
+		opts.onClose = fn
+	}
+}
+
+func WithOnSubscribe(fn func(count int)) AsyncTopicOption {
+	return func(opts *AsyncTopicOptions) {
+		opts.onSubscribe = fn
 	}
 }
