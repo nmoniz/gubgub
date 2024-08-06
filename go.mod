@@ -1,4 +1,4 @@
-module gitlab.com/gubgub
+module gitlab.com/naterciom/gubgub
 
 go 1.22.5
 
