@@ -9,7 +9,7 @@ format:
     - go fmt gitlab.com/naterciom/gubgub
     - go vet gitlab.com/naterciom/gubgub
     - go test -race -cover gitlab.com/naterciom/gubgub
-  coverage: /coverage: \d+.\d+% of statements/ 
+  coverage: '/coverage: \d+.\d+% of statements/'
 
 
 
