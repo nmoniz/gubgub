@@ -8,6 +8,6 @@ format:
   script:
     - go fmt gitlab.com/naterciom/gubgub
     - go vet gitlab.com/naterciom/gubgub
-    - go test -race gitlab.com/naterciom/gubgub
+    - go test -race -cover gitlab.com/naterciom/gubgub
 
 
