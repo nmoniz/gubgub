@@ -6,7 +6,9 @@ import (
 	"sync"
 )
 
-// AsyncTopic allows any message T to be broadcast to all subscribers.
+// AsyncTopic allows any message T to be broadcast to subscribers. Publishing as well as
+// subscribing happens asynchronously. Due to the nature of async processes this cannot guarantee
+// message delivery nor delivery order.
 type AsyncTopic[T any] struct {
 	options AsyncTopicOptions
 
@@ -17,7 +19,7 @@ type AsyncTopic[T any] struct {
 	subscribeCh chan Subscriber[T]
 }
 
-// NewAsyncTopic creates a Topic that publishes messages asynchronously.
+// NewAsyncTopic creates an AsyncTopic that will be closed when the given context is cancelled.
 func NewAsyncTopic[T any](ctx context.Context, opts ...AsyncTopicOption) *AsyncTopic[T] {
 	options := AsyncTopicOptions{
 		onClose:     func() {},
@@ -40,8 +42,6 @@ func NewAsyncTopic[T any](ctx context.Context, opts ...AsyncTopicOption) *AsyncT
 }
 
 func (t *AsyncTopic[T]) run(ctx context.Context) {
-	defer close(t.publishCh)
-	defer close(t.subscribeCh)
 	defer t.close()
 
 	var subscribers []Subscriber[T]
@@ -73,33 +73,64 @@ func (t *AsyncTopic[T]) run(ctx context.Context) {
 // Publish broadcasts a msg to all subscribers.
 func (t *AsyncTopic[T]) Publish(msg T) error {
 	t.mu.RLock()
-	defer t.mu.RUnlock()
 
 	if t.closed {
+		t.mu.RUnlock()
 		return fmt.Errorf("async topic publish: %w", ErrTopicClosed)
 	}
 
-	t.publishCh <- msg
+	go func() {
+		t.publishCh <- msg
+		t.mu.RUnlock()
+	}()
+
 	return nil
 }
 
 // Subscribe adds a Subscriber func that will consume future published messages.
 func (t *AsyncTopic[T]) Subscribe(fn Subscriber[T]) error {
 	t.mu.RLock()
-	defer t.mu.RUnlock()
 
 	if t.closed {
+		t.mu.RUnlock()
 		return fmt.Errorf("async topic subscribe: %w", ErrTopicClosed)
 	}
 
-	t.subscribeCh <- fn
+	go func() {
+		t.subscribeCh <- fn
+		t.mu.RUnlock()
+	}()
+
 	return nil
 }
 
 func (t *AsyncTopic[T]) close() {
+	var wg sync.WaitGroup
+
+	wg.Add(2)
+
+	go func() {
+		defer wg.Done()
+		for range t.publishCh {
+			// drain publishCh to release all read locks
+		}
+	}()
+
+	go func() {
+		defer wg.Done()
+		for range t.subscribeCh {
+			// drain subscribeCh to release all read locks
+		}
+	}()
+
 	t.mu.Lock()
-	t.closed = true
+	t.closed = true // no more subscribing or publishing
 	t.mu.Unlock()
+
+	close(t.publishCh)
+	close(t.subscribeCh)
+
+	wg.Wait()
 
 	t.options.onClose()
 }

@@ -10,28 +10,34 @@ import (
 )
 
 func TestAsyncTopic_SinglePublisherSingleSubscriber(t *testing.T) {
-	const msgCount = 5
+	const msgCount = 100
 
-	topic := NewAsyncTopic[int](context.Background())
+	subscriberReady := make(chan struct{})
+	defer close(subscriberReady)
 
-	feedback := make(chan int, msgCount)
+	topic := NewAsyncTopic[int](context.Background(), WithOnSubscribe(func(count int) {
+		subscriberReady <- struct{}{}
+	}))
+
+	feedback := make(chan struct{}, msgCount)
 	defer close(feedback)
 
 	err := topic.Subscribe(func(i int) bool {
-		feedback <- i
+		feedback <- struct{}{}
 		return true
 	})
 	require.NoError(t, err)
 
-	for i := 0; i < msgCount; i++ {
+	<-subscriberReady
+
+	for i := range msgCount {
 		require.NoError(t, topic.Publish(i))
 	}
 
 	count := 0
 	for count < msgCount {
 		select {
-		case f := <-feedback:
-			assert.Equalf(t, count, f, "expected to get %d but got %d instead", count, f)
+		case <-feedback:
 			count++
 
 		case <-time.After(time.Second):
@@ -47,7 +53,14 @@ func TestAsyncTopic_MultiPublishersMultiSubscribers(t *testing.T) {
 		msgCount = pubCount * 100 // total messages to publish (delivered to EACH subscriber)
 	)
 
-	topic := NewAsyncTopic[int](context.Background())
+	subscribersReady := make(chan struct{})
+	defer close(subscribersReady)
+
+	topic := NewAsyncTopic[int](context.Background(), WithOnSubscribe(func(count int) {
+		if count == subCount {
+			subscribersReady <- struct{}{}
+		}
+	}))
 
 	expFeedbackCount := msgCount * subCount
 	feedback := make(chan int, expFeedbackCount)
@@ -66,6 +79,8 @@ func TestAsyncTopic_MultiPublishersMultiSubscribers(t *testing.T) {
 		toDeliver <- i
 	}
 	close(toDeliver)
+
+	<-subscribersReady
 
 	for range pubCount {
 		go func() {
@@ -135,52 +150,45 @@ func TestAsyncTopic_WithOnSubscribe(t *testing.T) {
 	}
 }
 
-func TestAsyncTopic_SubscribeClosedTopicError(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	feedback := make(chan struct{})
-	defer close(feedback)
-
-	topic := NewAsyncTopic[int](ctx, WithOnClose(func() { feedback <- struct{}{} }))
-
-	require.NoError(t, topic.Subscribe(func(i int) bool { return true }))
-
-	cancel() // this should close the topic, no more subscribers should be accepted
-
-	select {
-	case <-feedback:
-		break
-
-	case <-time.After(time.Second):
-		t.Fatalf("expected feedback by now")
+func TestAsyncTopic_ClosedTopicError(t *testing.T) {
+	testCases := []struct {
+		name     string
+		assertFn func(*AsyncTopic[int])
+	}{
+		{
+			name: "publishing returns error",
+			assertFn: func(topic *AsyncTopic[int]) {
+				assert.Error(t, ErrTopicClosed, topic.Publish(1))
+			},
+		},
+		{
+			name: "subscribing returns error",
+			assertFn: func(topic *AsyncTopic[int]) {
+				assert.Error(t, ErrTopicClosed, topic.Subscribe(func(i int) bool { return true }))
+			},
+		},
 	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-	require.Error(t, ErrTopicClosed, topic.Subscribe(func(i int) bool { return true }))
-}
+			feedback := make(chan struct{})
+			defer close(feedback)
 
-func TestAsyncTopic_PublishClosedTopicError(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+			topic := NewAsyncTopic[int](ctx, WithOnClose(func() { feedback <- struct{}{} }))
 
-	feedback := make(chan struct{})
-	defer close(feedback)
+			cancel() // this should close the topic, no more messages can be published
 
-	topic := NewAsyncTopic[int](ctx, WithOnClose(func() { feedback <- struct{}{} }))
+			select {
+			case <-feedback:
+				break
 
-	require.NoError(t, topic.Subscribe(func(i int) bool { return true }))
+			case <-time.After(time.Second):
+				t.Fatalf("expected feedback by now")
+			}
 
-	require.NoError(t, topic.Publish(123))
-
-	cancel() // this should close the topic, no more messages can be published
-
-	select {
-	case <-feedback:
-		break
-
-	case <-time.After(time.Second):
-		t.Fatalf("expected feedback by now")
+			tc.assertFn(topic)
+		})
 	}
-
-	require.Error(t, ErrTopicClosed, topic.Publish(1))
 }
