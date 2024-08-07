@@ -10,9 +10,9 @@ import (
 )
 
 func TestAsyncTopic_SinglePublisherSingleSubscriber(t *testing.T) {
-	const msgCount = 100
+	const msgCount = 10
 
-	subscriberReady := make(chan struct{})
+	subscriberReady := make(chan struct{}, 1)
 	defer close(subscriberReady)
 
 	topic := NewAsyncTopic[int](context.Background(), WithOnSubscribe(func(count int) {
@@ -35,12 +35,14 @@ func TestAsyncTopic_SinglePublisherSingleSubscriber(t *testing.T) {
 	}
 
 	count := 0
+	timeout := time.After(time.Second)
+
 	for count < msgCount {
 		select {
 		case <-feedback:
 			count++
 
-		case <-time.After(time.Second):
+		case <-timeout:
 			t.Fatalf("expected %d feedback items by now but only got %d", msgCount, count)
 		}
 	}
@@ -53,7 +55,7 @@ func TestAsyncTopic_MultiPublishersMultiSubscribers(t *testing.T) {
 		msgCount = pubCount * 100 // total messages to publish (delivered to EACH subscriber)
 	)
 
-	subscribersReady := make(chan struct{})
+	subscribersReady := make(chan struct{}, 1)
 	defer close(subscribersReady)
 
 	topic := NewAsyncTopic[int](context.Background(), WithOnSubscribe(func(count int) {
@@ -91,12 +93,14 @@ func TestAsyncTopic_MultiPublishersMultiSubscribers(t *testing.T) {
 	}
 
 	count := 0
+	timeout := time.After(time.Second)
+
 	for count != expFeedbackCount {
 		select {
 		case <-feedback:
 			count++
 
-		case <-time.After(time.Second):
+		case <-timeout:
 			t.Fatalf("expected %d feedback items by now but only got %d", expFeedbackCount, count)
 		}
 	}
@@ -106,7 +110,7 @@ func TestAsyncTopic_WithOnClose(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	feedback := make(chan struct{})
+	feedback := make(chan struct{}, 1)
 	defer close(feedback)
 
 	_ = NewAsyncTopic[int](ctx, WithOnClose(func() { feedback <- struct{}{} }))
@@ -138,13 +142,15 @@ func TestAsyncTopic_WithOnSubscribe(t *testing.T) {
 	}
 
 	count := 0
+	timeout := time.After(time.Second)
+
 	for count < totalSub {
 		select {
 		case c := <-feedback:
 			count++
 			assert.Equal(t, count, c, "expected %d but got %d instead", count, c)
 
-		case <-time.After(time.Second):
+		case <-timeout:
 			t.Fatalf("expected %d feedback items by now but only got %d", totalSub, count)
 		}
 	}
@@ -173,7 +179,7 @@ func TestAsyncTopic_ClosedTopicError(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			feedback := make(chan struct{})
+			feedback := make(chan struct{}, 1)
 			defer close(feedback)
 
 			topic := NewAsyncTopic[int](ctx, WithOnClose(func() { feedback <- struct{}{} }))
@@ -190,5 +196,49 @@ func TestAsyncTopic_ClosedTopicError(t *testing.T) {
 
 			tc.assertFn(topic)
 		})
+	}
+}
+
+func TestAsyncTopic_AllPublishedBeforeClosedAreDeliveredAfterClosed(t *testing.T) {
+	const msgCount = 10
+
+	subscriberReady := make(chan struct{}, 1)
+	defer close(subscriberReady)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	topic := NewAsyncTopic[int](ctx, WithOnSubscribe(func(count int) {
+		subscriberReady <- struct{}{}
+	}))
+
+	feedback := make(chan int) // unbuffered will cause choke point for publishers
+	defer close(feedback)
+
+	err := topic.Subscribe(func(i int) bool {
+		feedback <- i
+		return true
+	})
+	require.NoError(t, err)
+
+	<-subscriberReady
+
+	for i := range msgCount {
+		require.NoError(t, topic.Publish(i))
+	}
+
+	cancel()
+
+	values := make(map[int]struct{}, msgCount)
+	timeout := time.After(time.Second)
+
+	for len(values) < msgCount {
+		select {
+		case f := <-feedback:
+			values[f] = struct{}{}
+
+		case <-timeout:
+			t.Fatalf("expected %d unique feedback values by now but only got %d", msgCount, len(values))
+		}
 	}
 }

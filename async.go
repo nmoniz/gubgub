@@ -7,8 +7,12 @@ import (
 )
 
 // AsyncTopic allows any message T to be broadcast to subscribers. Publishing as well as
-// subscribing happens asynchronously. Due to the nature of async processes this cannot guarantee
-// message delivery nor delivery order.
+// subscribing happens asynchronously.
+// This guarantees that every published message will be delivered but does NOT guarantee delivery
+// order.
+// In the unlikely scenario where subscribers are being queued very aggressively it is possible
+// that some might never actually receive any message. Subscriber registration order is also not
+// guaranteed.
 type AsyncTopic[T any] struct {
 	options AsyncTopicOptions
 
@@ -20,6 +24,7 @@ type AsyncTopic[T any] struct {
 }
 
 // NewAsyncTopic creates an AsyncTopic that will be closed when the given context is cancelled.
+// After closed calls to Publish or Subscribe will return an error.
 func NewAsyncTopic[T any](ctx context.Context, opts ...AsyncTopicOption) *AsyncTopic[T] {
 	options := AsyncTopicOptions{
 		onClose:     func() {},
@@ -33,29 +38,43 @@ func NewAsyncTopic[T any](ctx context.Context, opts ...AsyncTopicOption) *AsyncT
 	t := AsyncTopic[T]{
 		options:     options,
 		publishCh:   make(chan T, 1),
-		subscribeCh: make(chan Subscriber[T]),
+		subscribeCh: make(chan Subscriber[T], 1),
 	}
 
-	go t.run(ctx)
+	go t.closer(ctx)
+	go t.run()
 
 	return &t
 }
 
-func (t *AsyncTopic[T]) run(ctx context.Context) {
-	defer t.close()
+func (t *AsyncTopic[T]) closer(ctx context.Context) {
+	<-ctx.Done()
 
+	t.mu.Lock()
+	t.closed = true // no more subscribing or publishing
+	t.mu.Unlock()
+
+	close(t.publishCh)
+	close(t.subscribeCh)
+
+	t.options.onClose()
+}
+
+func (t *AsyncTopic[T]) run() {
 	var subscribers []Subscriber[T]
 
 	for {
 		select {
-		case <-ctx.Done():
-			return
-
 		case newCallback := <-t.subscribeCh:
 			subscribers = append(subscribers, newCallback)
 			t.options.onSubscribe(len(subscribers))
 
-		case msg := <-t.publishCh:
+		case msg, more := <-t.publishCh:
+			if !more {
+				// No more published messages, promise was fulfilled and we can return
+				return
+			}
+
 			keepers := make([]Subscriber[T], 0, len(subscribers))
 
 			for _, callback := range subscribers {
@@ -102,37 +121,6 @@ func (t *AsyncTopic[T]) Subscribe(fn Subscriber[T]) error {
 	}()
 
 	return nil
-}
-
-func (t *AsyncTopic[T]) close() {
-	var wg sync.WaitGroup
-
-	wg.Add(2)
-
-	go func() {
-		defer wg.Done()
-		for range t.publishCh {
-			// drain publishCh to release all read locks
-		}
-	}()
-
-	go func() {
-		defer wg.Done()
-		for range t.subscribeCh {
-			// drain subscribeCh to release all read locks
-		}
-	}()
-
-	t.mu.Lock()
-	t.closed = true // no more subscribing or publishing
-	t.mu.Unlock()
-
-	close(t.publishCh)
-	close(t.subscribeCh)
-
-	wg.Wait()
-
-	t.options.onClose()
 }
 
 type AsyncTopicOptions struct {
