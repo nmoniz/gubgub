@@ -35,14 +35,14 @@ func TestAsyncTopic_SinglePublisherSingleSubscriber(t *testing.T) {
 	}
 
 	count := 0
-	timeout := time.After(time.Second)
+	timeout := testTimer(t, time.Second)
 
 	for count < msgCount {
 		select {
 		case <-feedback:
 			count++
 
-		case <-timeout:
+		case <-timeout.C:
 			t.Fatalf("expected %d feedback items by now but only got %d", msgCount, count)
 		}
 	}
@@ -93,14 +93,14 @@ func TestAsyncTopic_MultiPublishersMultiSubscribers(t *testing.T) {
 	}
 
 	count := 0
-	timeout := time.After(time.Second)
+	timeout := testTimer(t, time.Second)
 
 	for count != expFeedbackCount {
 		select {
 		case <-feedback:
 			count++
 
-		case <-timeout:
+		case <-timeout.C:
 			t.Fatalf("expected %d feedback items by now but only got %d", expFeedbackCount, count)
 		}
 	}
@@ -121,7 +121,7 @@ func TestAsyncTopic_WithOnClose(t *testing.T) {
 	case <-feedback:
 		break
 
-	case <-time.After(time.Second):
+	case <-testTimer(t, time.Second).C:
 		t.Fatalf("expected feedback by now")
 	}
 }
@@ -142,7 +142,7 @@ func TestAsyncTopic_WithOnSubscribe(t *testing.T) {
 	}
 
 	count := 0
-	timeout := time.After(time.Second)
+	timeout := testTimer(t, time.Second)
 
 	for count < totalSub {
 		select {
@@ -150,7 +150,7 @@ func TestAsyncTopic_WithOnSubscribe(t *testing.T) {
 			count++
 			assert.Equal(t, count, c, "expected %d but got %d instead", count, c)
 
-		case <-timeout:
+		case <-timeout.C:
 			t.Fatalf("expected %d feedback items by now but only got %d", totalSub, count)
 		}
 	}
@@ -190,7 +190,7 @@ func TestAsyncTopic_ClosedTopicError(t *testing.T) {
 			case <-feedback:
 				break
 
-			case <-time.After(time.Second):
+			case <-testTimer(t, time.Second).C:
 				t.Fatalf("expected feedback by now")
 			}
 
@@ -230,15 +230,26 @@ func TestAsyncTopic_AllPublishedBeforeClosedAreDeliveredAfterClosed(t *testing.T
 	cancel()
 
 	values := make(map[int]struct{}, msgCount)
-	timeout := time.After(time.Second)
+	timeout := testTimer(t, time.Second)
 
 	for len(values) < msgCount {
 		select {
 		case f := <-feedback:
 			values[f] = struct{}{}
 
-		case <-timeout:
+		case <-timeout.C:
 			t.Fatalf("expected %d unique feedback values by now but only got %d", msgCount, len(values))
 		}
 	}
+}
+
+func testTimer(t testing.TB, d time.Duration) *time.Timer {
+	t.Helper()
+
+	timer := time.NewTimer(d)
+	t.Cleanup(func() {
+		timer.Stop()
+	})
+
+	return timer
 }
