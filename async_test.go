@@ -202,15 +202,17 @@ func TestAsyncTopic_ClosedTopicError(t *testing.T) {
 func TestAsyncTopic_AllPublishedBeforeClosedAreDeliveredAfterClosed(t *testing.T) {
 	const msgCount = 10
 
-	subscriberReady := make(chan struct{}, 1)
-	defer close(subscriberReady)
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	topic := NewAsyncTopic[int](ctx, WithOnSubscribe(func(count int) {
-		subscriberReady <- struct{}{}
-	}))
+	subscriberReady := make(chan struct{}, 1)
+	defer close(subscriberReady)
+
+	topic := NewAsyncTopic[int](ctx,
+		WithOnSubscribe(func(count int) {
+			subscriberReady <- struct{}{}
+		}),
+	)
 
 	feedback := make(chan int) // unbuffered will cause choke point for publishers
 	defer close(feedback)

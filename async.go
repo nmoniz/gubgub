@@ -27,8 +27,8 @@ type AsyncTopic[T any] struct {
 // After closed calls to Publish or Subscribe will return an error.
 func NewAsyncTopic[T any](ctx context.Context, opts ...AsyncTopicOption) *AsyncTopic[T] {
 	options := AsyncTopicOptions{
-		onClose:     func() {},
-		onSubscribe: func(count int) {},
+		onClose:     func() {},          // Called after the Topic is closed and all messages have been delivered.
+		onSubscribe: func(count int) {}, // Called everytime a new subscriber is added
 	}
 
 	for _, opt := range opts {
@@ -56,23 +56,31 @@ func (t *AsyncTopic[T]) closer(ctx context.Context) {
 
 	close(t.publishCh)
 	close(t.subscribeCh)
-
-	t.options.onClose()
 }
 
 func (t *AsyncTopic[T]) run() {
+	defer t.options.onClose()
+
 	var subscribers []Subscriber[T]
 
-	for {
+	var drainedSubscribe, drainedPublish bool
+	for !drainedSubscribe || !drainedPublish {
 		select {
-		case newCallback := <-t.subscribeCh:
+		case newCallback, more := <-t.subscribeCh:
+			if !more {
+				// Ignore subscribeCh close. The publishCh will dictate when to exit this loop.
+				drainedSubscribe = true
+				break
+			}
+
 			subscribers = append(subscribers, newCallback)
 			t.options.onSubscribe(len(subscribers))
 
 		case msg, more := <-t.publishCh:
 			if !more {
 				// No more published messages, promise was fulfilled and we can return
-				return
+				drainedPublish = true
+				break
 			}
 
 			keepers := make([]Subscriber[T], 0, len(subscribers))
