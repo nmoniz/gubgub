@@ -28,7 +28,7 @@ type MyMessage struct {
 }
 
 func consumer(msg MyMessage) {
-    fmt.Printf("Hello %s", msg.Name)
+	fmt.Printf("Hello %s", msg.Name)
 }
 
 func main() {
@@ -39,8 +39,8 @@ func main() {
 
 	topic.Subscribe(gubgub.Forever(consumer))
 
-    // The AsyncTopic doesn't wait for the subscriber to be registered so, for the purposes of this
-    // example, we sleep on it.
+	// The AsyncTopic doesn't wait for the subscriber to be registered so, for the purposes of this
+	// example, we sleep on it.
 	time.Sleep(time.Millisecond)
 
 	topic.Publish(MyMessage{Name: "John Smith"})
