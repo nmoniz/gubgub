@@ -2,7 +2,6 @@ package gubgub
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"time"
 
