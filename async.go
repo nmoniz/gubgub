@@ -69,7 +69,6 @@ func (t *AsyncTopic[T]) run() {
 		select {
 		case newCallback, more := <-t.subscribeCh:
 			if !more {
-				// Ignore subscribeCh close. The publishCh will dictate when to exit this loop.
 				drainedSubscribe = true
 				break
 			}
@@ -79,7 +78,6 @@ func (t *AsyncTopic[T]) run() {
 
 		case msg, more := <-t.publishCh:
 			if !more {
-				// No more published messages, promise was fulfilled and we can return
 				drainedPublish = true
 				break
 			}
@@ -123,7 +121,7 @@ func (t *AsyncTopic[T]) Subscribe(fn Subscriber[T]) error {
 	return nil
 }
 
-// Feed allows you to for/range to consume future published messages. The supporting subscriber will eventually be discarded after you exit the for loop.
+// Feed allows the usage of for/range to consume future published messages. The supporting subscriber will eventually be discarded after you exit the for loop.
 func (t *AsyncTopic[T]) Feed() iter.Seq[T] {
 	feed := make(chan T, 1)
 	done := make(chan struct{})

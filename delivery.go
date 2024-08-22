@@ -1,7 +1,8 @@
 package gubgub
 
-// sequentialDelivery delivers a message to each subscriber sequentially. For performance reasons
-// this might mutate the subscribers slice inplace. Please overwrite it with the result of this
+// sequentialDelivery effentiently delivers a message to each subscriber sequentially. For
+// performance reasons this might mutate the subscribers slice inplace. Please overwrite it with
+// the result of this
 // call.
 func sequentialDelivery[T any](msg T, subscribers []Subscriber[T]) []Subscriber[T] {
 	last := len(subscribers) - 1

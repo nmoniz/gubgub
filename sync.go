@@ -2,8 +2,8 @@ package gubgub
 
 import "sync"
 
-// SyncTopic allows any message T to be broadcast to subscribers. Publishing and Subscribing
-// happens synchronously (block).
+// SyncTopic is the simplest and most naive topic. It allows any message T to be broadcast to
+// subscribers. Publishing and Subscribing happens synchronously (block).
 type SyncTopic[T any] struct {
 	mu          sync.Mutex
 	subscribers []Subscriber[T]
@@ -19,16 +19,7 @@ func (t *SyncTopic[T]) Publish(msg T) error {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
-	keepers := make([]Subscriber[T], 0, len(t.subscribers))
-
-	for _, callback := range t.subscribers {
-		keep := callback(msg)
-		if keep {
-			keepers = append(keepers, callback)
-		}
-	}
-
-	t.subscribers = keepers
+	t.subscribers = sequentialDelivery(msg, t.subscribers)
 
 	return nil
 }
