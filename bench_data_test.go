@@ -60,24 +60,24 @@ var deliveryCases = []benchSubscriberSetup{
 		Subscriber: NoOp[int](),
 	},
 	{
-		Name:       "10K Subscribers 1% unsubscribe",
+		Name:       "10K Subscribers 10% unsubscribe",
 		Count:      10000,
-		Subscriber: Quiter(100),
+		Subscriber: Quiter(10),
 	},
 	{
-		Name:       "100K Subscribers 1% unsubscribe",
+		Name:       "100K Subscribers 10% unsubscribe",
 		Count:      100000,
-		Subscriber: Quiter(100),
+		Subscriber: Quiter(10),
 	},
 	{
-		Name:       "10K Subscribers 2% unsubscribe",
+		Name:       "10K Subscribers 50% unsubscribe",
 		Count:      10000,
-		Subscriber: Quiter(50),
+		Subscriber: Quiter(2),
 	},
 	{
-		Name:       "100K Subscribers 2% unsubscribe",
+		Name:       "100K Subscribers 50% unsubscribe",
 		Count:      100000,
-		Subscriber: Quiter(50),
+		Subscriber: Quiter(2),
 	},
 }
 

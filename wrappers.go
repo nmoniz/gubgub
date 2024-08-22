@@ -1,6 +1,6 @@
 package gubgub
 
-// Forever wrapper makes it more explicit that a subscriber will never stop consuming messages.
+// Forever wraps a subscriber that will never stop consuming messages.
 // This helps avoiding subscribers that always return TRUE.
 func Forever[T any](fn func(T)) Subscriber[T] {
 	return func(msg T) bool {
@@ -9,7 +9,7 @@ func Forever[T any](fn func(T)) Subscriber[T] {
 	}
 }
 
-// Once returns a subscriber that will consume only one message.
+// Once wraps a subscriber that will consume only one message.
 // This helps avoiding subscribers that always return FALSE.
 func Once[T any](fn func(T)) Subscriber[T] {
 	return func(t T) bool {
