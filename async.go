@@ -3,6 +3,7 @@ package gubgub
 import (
 	"context"
 	"fmt"
+	"iter"
 	"sync"
 )
 
@@ -83,16 +84,7 @@ func (t *AsyncTopic[T]) run() {
 				break
 			}
 
-			keepers := make([]Subscriber[T], 0, len(subscribers))
-
-			for _, callback := range subscribers {
-				keep := callback(msg)
-				if keep {
-					keepers = append(keepers, callback)
-				}
-			}
-
-			subscribers = keepers
+			subscribers = sequentialDelivery(msg, subscribers)
 		}
 	}
 }
@@ -129,6 +121,32 @@ func (t *AsyncTopic[T]) Subscribe(fn Subscriber[T]) error {
 	}()
 
 	return nil
+}
+
+// Feed allows you to for/range to consume future published messages. The supporting subscriber will eventually be discarded after you exit the for loop.
+func (t *AsyncTopic[T]) Feed() iter.Seq[T] {
+	feed := make(chan T, 1)
+	done := make(chan struct{})
+
+	t.Subscribe(func(msg T) bool {
+		select {
+		case feed <- msg:
+			return true
+		case <-done:
+			close(feed)
+			return false
+		}
+	})
+
+	return func(yield func(T) bool) {
+		defer close(done)
+
+		for msg := range feed {
+			if !yield(msg) {
+				return
+			}
+		}
+	}
 }
 
 type AsyncTopicOptions struct {
