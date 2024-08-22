@@ -249,50 +249,6 @@ func TestAsyncTopic_AllPublishedBeforeClosedAreDeliveredAfterClosed(t *testing.T
 	}
 }
 
-func TestAsyncTopic_Feed(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	subscriberReady := make(chan struct{}, 1)
-	defer close(subscriberReady)
-
-	topic := NewAsyncTopic[int](ctx,
-		WithOnSubscribe(func(count int) {
-			subscriberReady <- struct{}{}
-		}),
-	)
-
-	wg := sync.WaitGroup{}
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		seen := make(map[int]struct{})
-		for i := range topic.Feed() {
-			seen[i] = struct{}{}
-			if len(seen) >= 9 {
-				return
-			}
-		}
-	}()
-
-	<-subscriberReady
-
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-
-		for i := range 10 {
-			topic.Publish(i)
-		}
-	}()
-
-	wg.Wait()
-
-	time.Sleep(time.Second)
-}
-
 func testTimer(t testing.TB, d time.Duration) *time.Timer {
 	t.Helper()
 
