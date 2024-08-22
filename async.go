@@ -68,7 +68,6 @@ func (t *AsyncTopic[T]) run() {
 		select {
 		case newCallback, more := <-t.subscribeCh:
 			if !more {
-				// Ignore subscribeCh close. The publishCh will dictate when to exit this loop.
 				drainedSubscribe = true
 				break
 			}
@@ -78,21 +77,11 @@ func (t *AsyncTopic[T]) run() {
 
 		case msg, more := <-t.publishCh:
 			if !more {
-				// No more published messages, promise was fulfilled and we can return
 				drainedPublish = true
 				break
 			}
 
-			keepers := make([]Subscriber[T], 0, len(subscribers))
-
-			for _, callback := range subscribers {
-				keep := callback(msg)
-				if keep {
-					keepers = append(keepers, callback)
-				}
-			}
-
-			subscribers = keepers
+			subscribers = sequentialDelivery(msg, subscribers)
 		}
 	}
 }

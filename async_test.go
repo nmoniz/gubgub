@@ -55,10 +55,13 @@ func TestAsyncTopic_MultiPublishersMultiSubscribers(t *testing.T) {
 		msgCount = pubCount * 100 // total messages to publish (delivered to EACH subscriber)
 	)
 
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+
 	subscribersReady := make(chan struct{}, 1)
 	defer close(subscribersReady)
 
-	topic := NewAsyncTopic[int](context.Background(), WithOnSubscribe(func(count int) {
+	topic := NewAsyncTopic[int](ctx, WithOnSubscribe(func(count int) {
 		if count == subCount {
 			subscribersReady <- struct{}{}
 		}

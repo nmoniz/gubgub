@@ -7,7 +7,7 @@ import (
 )
 
 func BenchmarkSyncTopic_Publish(b *testing.B) {
-	for _, tc := range benchTestCase {
+	for _, tc := range publishCases {
 		b.Run(tc.Name, func(b *testing.B) {
 			topic := NewSyncTopic[int]()
 

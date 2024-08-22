@@ -8,7 +8,7 @@ import (
 )
 
 func BenchmarkAsyncTopic_Publish(b *testing.B) {
-	for _, tc := range benchTestCase {
+	for _, tc := range publishCases {
 		b.Run(tc.Name, func(b *testing.B) {
 
 			ctx, cancel := context.WithCancel(context.Background())
