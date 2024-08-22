@@ -12,27 +12,28 @@ func TestSequentialDelivery(t *testing.T) {
 	feedback := make([]int, 0, 3)
 
 	subscribers := []Subscriber[int]{
-		func(msg int) bool {
+		Once(func(msg int) {
 			assert.Equalf(t, testMsg, msg, "expected %d but got %d", testMsg, msg)
 			feedback = append(feedback, 1)
-			return false
-		},
-		func(msg int) bool {
+		}),
+		Once(func(msg int) {
 			assert.Equalf(t, testMsg, msg, "expected %d but got %d", testMsg, msg)
 			feedback = append(feedback, 2)
-			return true
-		},
-		func(msg int) bool {
+		}),
+		Once(func(msg int) {
 			assert.Equalf(t, testMsg, msg, "expected %d but got %d", testMsg, msg)
 			feedback = append(feedback, 3)
-			return true
-		},
+		}),
+		Forever(func(msg int) {
+			assert.Equalf(t, testMsg, msg, "expected %d but got %d", testMsg, msg)
+			feedback = append(feedback, 4)
+		}),
 	}
 
 	nextSubscribers := sequentialDelivery(testMsg, subscribers)
 
-	assert.Len(t, nextSubscribers, len(subscribers)-1, "expected to have one less subscriber")
-	assert.Len(t, feedback, 3, "one or more subscriber was not called")
+	assert.Len(t, nextSubscribers, 1, "expected to have 1 subscriber")
+	assert.Len(t, feedback, 4, "one or more subscriber was not called")
 
 	finalSubscribers := sequentialDelivery(testMsg, nextSubscribers)
 
@@ -40,8 +41,9 @@ func TestSequentialDelivery(t *testing.T) {
 	assert.Len(t, feedback, 5, "one or more subscriber was not called")
 
 	assertContainsExactlyN(t, 1, 1, feedback)
-	assertContainsExactlyN(t, 2, 2, feedback)
-	assertContainsExactlyN(t, 3, 2, feedback)
+	assertContainsExactlyN(t, 2, 1, feedback)
+	assertContainsExactlyN(t, 3, 1, feedback)
+	assertContainsExactlyN(t, 4, 2, feedback)
 }
 
 func assertContainsExactlyN[T comparable](t testing.TB, exp T, n int, slice []T) {
