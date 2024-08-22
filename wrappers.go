@@ -10,7 +10,7 @@ func Forever[T any](fn func(T)) Subscriber[T] {
 	}
 }
 
-// NoOp creates a sbscriber that does absolutely nothing forever. This is mostly useful for testing.
+// NoOp creates a subscriber that does absolutely nothing forever. This is mostly useful for testing.
 func NoOp[T any]() Subscriber[T] {
 	return func(_ T) bool { return true }
 }
