@@ -63,13 +63,22 @@ func (t *AsyncTopic[T]) run() {
 
 	var subscribers []Subscriber[T]
 
-	var drainedSubscribe, drainedPublish bool
-	for !drainedSubscribe || !drainedPublish {
+	defer func() {
+		// There are only one way to get here: the topic is now closed!
+		// Because both `subscribeCh` and `publishCh` channels are closed when the topic is closed
+		// this will always eventually return.
+		// This will deliver any potential queued message thus fulfilling the message delivery
+		// promise.
+		for msg := range t.publishCh {
+			subscribers = sequentialDelivery(msg, subscribers)
+		}
+	}()
+
+	for {
 		select {
 		case newCallback, more := <-t.subscribeCh:
 			if !more {
-				drainedSubscribe = true
-				break
+				return
 			}
 
 			subscribers = append(subscribers, newCallback)
@@ -77,8 +86,7 @@ func (t *AsyncTopic[T]) run() {
 
 		case msg, more := <-t.publishCh:
 			if !more {
-				drainedPublish = true
-				break
+				return
 			}
 
 			subscribers = sequentialDelivery(msg, subscribers)
