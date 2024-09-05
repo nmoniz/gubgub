@@ -129,26 +129,67 @@ func (t *AsyncTopic[T]) Subscribe(fn Subscriber[T]) error {
 	return nil
 }
 
-// Feed allows the usage of for/range to consume future published messages. The supporting subscriber will eventually be discarded after you exit the for loop.
+// Feed allows the usage of for/range to consume future published messages.
+// The supporting subscriber will eventually be discarded after you exit the for loop.
 func (t *AsyncTopic[T]) Feed() iter.Seq[T] {
-	feed := make(chan T, 1)
-	done := make(chan struct{})
+	feed := make(chan T, 1)            // closed by the middleman go routine
+	messages := make(chan T, 1)        // closed by the subscriber
+	yieldReady := make(chan struct{})  // closed by the iterator
+	unsubscribe := make(chan struct{}) // closed by the iterator
 
 	t.Subscribe(func(msg T) bool {
 		select {
-		case feed <- msg:
+		case messages <- msg:
 			return true
-		case <-done:
-			close(feed)
+		case <-unsubscribe:
+			close(messages)
 			return false
 		}
 	})
 
-	return func(yield func(T) bool) {
-		defer close(done)
+	go func() {
+		defer close(feed)
 
-		for msg := range feed {
-			if !yield(msg) {
+		q := make([]T, 0, 1)
+		waiting := false
+
+		for {
+			select {
+			case m, more := <-messages:
+				if !more {
+					return
+				}
+
+				if waiting {
+					waiting = false
+					feed <- m
+				} else {
+					q = append(q, m)
+				}
+
+			case _, more := <-yieldReady:
+				if !more {
+					return
+				}
+
+				if len(q) > 0 {
+					waiting = false
+					feed <- q[0]
+					q = q[1:]
+				} else {
+					waiting = true
+				}
+			}
+		}
+	}()
+
+	return func(yield func(T) bool) {
+		defer close(unsubscribe)
+		defer close(yieldReady)
+
+		for {
+			yieldReady <- struct{}{}
+			if !yield(<-feed) {
 				return
 			}
 		}
