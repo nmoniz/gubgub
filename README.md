@@ -2,7 +2,6 @@
 
 Yet another in-memory Go PubSub library.
 I started to develop what is now GubGub in one of my personal projects but I soon found myself using it in other completely unrelated projects and I thought it could be a nice thing to share.
-It might be very tailored to my personal preferences but my focus was concurrency safety and ease of usage.
 
 ## Getting started
 
@@ -48,20 +47,31 @@ func main() {
 	<-ctx.Done()
 }
 ```
+## Topics
 
-## Topic Benchmarks
+Topics are what this is all about. You publish to a topic and you subscribe to a topic. That is it.
 
-So far GubGub implements 2 kinds of topics:
+GubGub offers 2 kinds of topics:
 
-  * **SyncTopic** - Publishing blocks until the message was delivered. 
-  Subscribers speed and number **will** have a direct impact the publishing performance.
+  * **SyncTopic** - Publishing blocks until the message was delivered to all subscribers. 
+  Subscribing blocks until the subscriber is registered.
+
+  * **AsyncTopic** - Publishing schedules the message to be eventually delivered.
+  Subscribing schedules a subscriber to be eventually registered.
+  Only message delivery is garanteed.
+
+The type of topic does not relate to how messages are actually delivered. 
+Currently we deliver messages sequenctially (each subscriber gets the message one after the other).
+
+## Benchmarks
+
+  * **SyncTopic** - Subscribers speed and number **will** have a direct impact the publishing performance.
   Under the right conditions (few and fast subscribers) this is the most performant topic.
 
-  * **AsyncTopic** - Publishing schedules the message to be eventually delivered. 
-  Subscribers speed and number **will not** directly impact the publishing perfomance at the cost of some publishing overhead.
+  * **AsyncTopic** - Subscribers speed and number **will not** directly impact the publishing perfomance at the cost of some publishing overhead.
   This is generally the most scalable topic.
 
-The following benchmarks are just for reference on how the number of subscribers and their speed impact the publishing performance:
+The following benchmarks are just for topic comparison regarding how the number of subscribers and their speed can impact the publishing performance:
 
 ```
 BenchmarkAsyncTopic_Publish/10_NoOp_Subscribers-8         	 2047338	       498.7 ns/op

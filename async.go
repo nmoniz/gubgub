@@ -64,7 +64,7 @@ func (t *AsyncTopic[T]) run() {
 	var subscribers []Subscriber[T]
 
 	defer func() {
-		// There are only one way to get here: the topic is now closed!
+		// There is only one way to get here: the topic is now closed!
 		// Because both `subscribeCh` and `publishCh` channels are closed when the topic is closed
 		// this will always eventually return.
 		// This will deliver any potential queued message thus fulfilling the message delivery
