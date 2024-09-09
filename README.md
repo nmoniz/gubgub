@@ -32,7 +32,7 @@ func consumer(msg MyMessage) {
 	fmt.Printf("Hello %s", msg.Name)
 }
 
-func m2ain() {
+func main() {
 	topic := gubgub.NewAsyncTopic[MyMessage]()
 	defer topic.Close() // Returns after all messages are delivered
 

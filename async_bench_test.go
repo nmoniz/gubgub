@@ -10,7 +10,8 @@ func BenchmarkAsyncTopic_Publish(b *testing.B) {
 	for _, tc := range publishCases {
 		b.Run(tc.Name, func(b *testing.B) {
 			onSubscribe, subscribersReady := withNotifyOnNthSubscriber(b, int64(tc.Count))
-			topic := newTestAsyncTopic[int](b, onSubscribe)
+			topic := NewAsyncTopic[int](onSubscribe)
+			b.Cleanup(topic.Close)
 
 			for range tc.Count {
 				require.NoError(b, topic.Subscribe(tc.Subscriber))

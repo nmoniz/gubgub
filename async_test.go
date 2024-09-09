@@ -13,7 +13,8 @@ func TestAsyncTopic_SinglePublisherSingleSubscriber(t *testing.T) {
 	const msgCount = 10
 
 	onSubscribe, subscriberReady := withNotifyOnNthSubscriber(t, 1)
-	topic := newTestAsyncTopic[int](t, onSubscribe)
+	topic := NewAsyncTopic[int](onSubscribe)
+	t.Cleanup(topic.Close)
 
 	feedback := make(chan struct{}, msgCount)
 	defer close(feedback)
@@ -52,7 +53,8 @@ func TestAsyncTopic_MultiPublishersMultiSubscribers(t *testing.T) {
 	)
 
 	onSubscribe, subscribersReady := withNotifyOnNthSubscriber(t, subCount)
-	topic := newTestAsyncTopic[int](t, onSubscribe)
+	topic := NewAsyncTopic[int](onSubscribe)
+	t.Cleanup(topic.Close)
 
 	expFeedbackCount := msgCount * subCount
 	feedback := make(chan int, expFeedbackCount)
@@ -172,11 +174,12 @@ func TestAsyncTopic_ClosedTopicError(t *testing.T) {
 	}
 }
 
-func TestAsyncTopic_AllPublishedBeforeClosedAreDeliveredAfterClosed(t *testing.T) {
+func TestAsyncTopic_AllPublishedBeforeClosedAreDelivered(t *testing.T) {
 	const msgCount = 10
 
 	onSubscribe, subscriberReady := withNotifyOnNthSubscriber(t, 1)
-	topic := newTestAsyncTopic[int](t, onSubscribe)
+	topic := NewAsyncTopic[int](onSubscribe)
+	t.Cleanup(topic.Close)
 
 	feedback := make(chan int) // unbuffered will cause choke point for publishers
 	defer close(feedback)
@@ -218,13 +221,6 @@ func testTimer(t testing.TB, d time.Duration) *time.Timer {
 	})
 
 	return timer
-}
-
-func newTestAsyncTopic[T any](t testing.TB, opts ...TopicOption) *AsyncTopic[T] {
-	t.Helper()
-	topic := NewAsyncTopic[T](opts...)
-	t.Cleanup(topic.Close)
-	return topic
 }
 
 func withNotifyOnNthSubscriber(t testing.TB, n int64) (TopicOption, <-chan struct{}) {
