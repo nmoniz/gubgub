@@ -21,7 +21,13 @@ func main() {
 
 	topic.Subscribe(gubgub.Buffered(gubgub.Forever(Slow)))
 
-	fmt.Printf("Use 'Ctrl+C' to exit! Type messages followed by 'Enter' to publish them:\n")
+	go func() {
+		for s := range gubgub.Feed(topic, false) {
+			log.Printf("ForRange: %s", s)
+		}
+	}()
+
+	fmt.Printf("Use 'Ctrl+C' to exit! Type a message followed by 'Enter' to publish it:\n")
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		scanner.Scan()
