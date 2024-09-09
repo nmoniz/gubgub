@@ -1,7 +1,7 @@
 package gubgub
 
 import (
-	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,12 +12,8 @@ import (
 func TestAsyncTopic_SinglePublisherSingleSubscriber(t *testing.T) {
 	const msgCount = 10
 
-	subscriberReady := make(chan struct{}, 1)
-	defer close(subscriberReady)
-
-	topic := NewAsyncTopic[int](context.Background(), WithOnSubscribe(func(count int) {
-		subscriberReady <- struct{}{}
-	}))
+	onSubscribe, subscriberReady := withNotifyOnNthSubscriber(t, 1)
+	topic := newTestAsyncTopic[int](t, onSubscribe)
 
 	feedback := make(chan struct{}, msgCount)
 	defer close(feedback)
@@ -55,17 +51,8 @@ func TestAsyncTopic_MultiPublishersMultiSubscribers(t *testing.T) {
 		msgCount = pubCount * 100 // total messages to publish (delivered to EACH subscriber)
 	)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
-	subscribersReady := make(chan struct{}, 1)
-	defer close(subscribersReady)
-
-	topic := NewAsyncTopic[int](ctx, WithOnSubscribe(func(count int) {
-		if count == subCount {
-			subscribersReady <- struct{}{}
-		}
-	}))
+	onSubscribe, subscribersReady := withNotifyOnNthSubscriber(t, subCount)
+	topic := newTestAsyncTopic[int](t, onSubscribe)
 
 	expFeedbackCount := msgCount * subCount
 	feedback := make(chan int, expFeedbackCount)
@@ -110,15 +97,12 @@ func TestAsyncTopic_MultiPublishersMultiSubscribers(t *testing.T) {
 }
 
 func TestAsyncTopic_WithOnClose(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
 	feedback := make(chan struct{}, 1)
 	defer close(feedback)
 
-	_ = NewAsyncTopic[int](ctx, WithOnClose(func() { feedback <- struct{}{} }))
+	topic := NewAsyncTopic[int](WithOnClose(func() { feedback <- struct{}{} }))
 
-	cancel()
+	topic.Close()
 
 	select {
 	case <-feedback:
@@ -132,13 +116,10 @@ func TestAsyncTopic_WithOnClose(t *testing.T) {
 func TestAsyncTopic_WithOnSubscribe(t *testing.T) {
 	const totalSub = 10
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-
 	feedback := make(chan int, totalSub)
 	defer close(feedback)
 
-	topic := NewAsyncTopic[int](ctx, WithOnSubscribe(func(count int) { feedback <- count }))
+	topic := NewAsyncTopic[int](WithOnSubscribe(func(count int) { feedback <- count }))
 
 	for range totalSub {
 		topic.Subscribe(func(i int) bool { return true })
@@ -179,23 +160,12 @@ func TestAsyncTopic_ClosedTopicError(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-
 			feedback := make(chan struct{}, 1)
 			defer close(feedback)
 
-			topic := NewAsyncTopic[int](ctx, WithOnClose(func() { feedback <- struct{}{} }))
+			topic := NewAsyncTopic[int]()
 
-			cancel() // this should close the topic, no more messages can be published
-
-			select {
-			case <-feedback:
-				break
-
-			case <-testTimer(t, time.Second).C:
-				t.Fatalf("expected feedback by now")
-			}
+			topic.Close() // this should close the topic, no more messages can be published
 
 			tc.assertFn(topic)
 		})
@@ -205,17 +175,8 @@ func TestAsyncTopic_ClosedTopicError(t *testing.T) {
 func TestAsyncTopic_AllPublishedBeforeClosedAreDeliveredAfterClosed(t *testing.T) {
 	const msgCount = 10
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	subscriberReady := make(chan struct{}, 1)
-	defer close(subscriberReady)
-
-	topic := NewAsyncTopic[int](ctx,
-		WithOnSubscribe(func(count int) {
-			subscriberReady <- struct{}{}
-		}),
-	)
+	onSubscribe, subscriberReady := withNotifyOnNthSubscriber(t, 1)
+	topic := newTestAsyncTopic[int](t, onSubscribe)
 
 	feedback := make(chan int) // unbuffered will cause choke point for publishers
 	defer close(feedback)
@@ -232,7 +193,7 @@ func TestAsyncTopic_AllPublishedBeforeClosedAreDeliveredAfterClosed(t *testing.T
 		require.NoError(t, topic.Publish(i))
 	}
 
-	cancel()
+	go topic.Close()
 
 	values := make(map[int]struct{}, msgCount)
 	timeout := testTimer(t, time.Second)
@@ -257,4 +218,29 @@ func testTimer(t testing.TB, d time.Duration) *time.Timer {
 	})
 
 	return timer
+}
+
+func newTestAsyncTopic[T any](t testing.TB, opts ...TopicOption) *AsyncTopic[T] {
+	t.Helper()
+	topic := NewAsyncTopic[T](opts...)
+	t.Cleanup(topic.Close)
+	return topic
+}
+
+func withNotifyOnNthSubscriber(t testing.TB, n int64) (TopicOption, <-chan struct{}) {
+	t.Helper()
+
+	notify := make(chan struct{}, 1)
+	t.Cleanup(func() {
+		close(notify)
+	})
+
+	var counter atomic.Int64
+
+	return WithOnSubscribe(func(count int) {
+		c := counter.Add(1)
+		if c == n {
+			notify <- struct{}{}
+		}
+	}), notify
 }
