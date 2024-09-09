@@ -1,9 +1,7 @@
 package gubgub
 
 import (
-	"context"
 	"fmt"
-	"iter"
 	"sync"
 )
 
@@ -15,10 +13,11 @@ import (
 // that some might never actually receive any message. Subscriber registration order is also not
 // guaranteed.
 type AsyncTopic[T any] struct {
-	options AsyncTopicOptions
+	options TopicOptions
 
-	mu     sync.RWMutex
-	closed bool
+	mu      sync.RWMutex
+	closing bool
+	closed  chan struct{}
 
 	publishCh   chan T
 	subscribeCh chan Subscriber[T]
@@ -26,8 +25,8 @@ type AsyncTopic[T any] struct {
 
 // NewAsyncTopic creates an AsyncTopic that will be closed when the given context is cancelled.
 // After closed calls to Publish or Subscribe will return an error.
-func NewAsyncTopic[T any](ctx context.Context, opts ...AsyncTopicOption) *AsyncTopic[T] {
-	options := AsyncTopicOptions{
+func NewAsyncTopic[T any](opts ...TopicOption) *AsyncTopic[T] {
+	options := TopicOptions{
 		onClose:     func() {},          // Called after the Topic is closed and all messages have been delivered.
 		onSubscribe: func(count int) {}, // Called everytime a new subscriber is added
 	}
@@ -38,34 +37,46 @@ func NewAsyncTopic[T any](ctx context.Context, opts ...AsyncTopicOption) *AsyncT
 
 	t := AsyncTopic[T]{
 		options:     options,
+		closed:      make(chan struct{}),
 		publishCh:   make(chan T, 1),
 		subscribeCh: make(chan Subscriber[T], 1),
 	}
 
-	go t.closer(ctx)
 	go t.run()
 
 	return &t
 }
 
-func (t *AsyncTopic[T]) closer(ctx context.Context) {
-	<-ctx.Done()
+// Close terminates background go routines and prevents further publishing and subscribing. All
+// published messages are garanteed to be delivered once Close returns. This is idempotent.
+func (t *AsyncTopic[T]) Close() {
+	t.mu.RLock()
+	closing := t.closing
+	t.mu.RUnlock()
+
+	if closing {
+		// It's either already closed or it's closing.
+		return
+	}
 
 	t.mu.Lock()
-	t.closed = true // no more subscribing or publishing
+	t.closing = true // no more subscribing or publishing
 	t.mu.Unlock()
 
 	close(t.publishCh)
 	close(t.subscribeCh)
+
+	<-t.closed
 }
 
 func (t *AsyncTopic[T]) run() {
+	defer close(t.closed)
 	defer t.options.onClose()
 
 	var subscribers []Subscriber[T]
 
 	defer func() {
-		// There is only one way to get here: the topic is now closed!
+		// There is only one way to get here: the topic is now closing!
 		// Because both `subscribeCh` and `publishCh` channels are closed when the topic is closed
 		// this will always eventually return.
 		// This will deliver any potential queued message thus fulfilling the message delivery
@@ -99,7 +110,7 @@ func (t *AsyncTopic[T]) run() {
 func (t *AsyncTopic[T]) Publish(msg T) error {
 	t.mu.RLock()
 
-	if t.closed {
+	if t.closing {
 		t.mu.RUnlock()
 		return fmt.Errorf("async topic publish: %w", ErrTopicClosed)
 	}
@@ -116,7 +127,7 @@ func (t *AsyncTopic[T]) Publish(msg T) error {
 func (t *AsyncTopic[T]) Subscribe(fn Subscriber[T]) error {
 	t.mu.RLock()
 
-	if t.closed {
+	if t.closing {
 		t.mu.RUnlock()
 		return fmt.Errorf("async topic subscribe: %w", ErrTopicClosed)
 	}
@@ -127,90 +138,4 @@ func (t *AsyncTopic[T]) Subscribe(fn Subscriber[T]) error {
 	}()
 
 	return nil
-}
-
-// Feed allows the usage of for/range to consume future published messages.
-// The supporting subscriber will eventually be discarded after you exit the for loop.
-func (t *AsyncTopic[T]) Feed() iter.Seq[T] {
-	feed := make(chan T, 1)            // closed by the middleman go routine
-	messages := make(chan T, 1)        // closed by the subscriber
-	yieldReady := make(chan struct{})  // closed by the iterator
-	unsubscribe := make(chan struct{}) // closed by the iterator
-
-	t.Subscribe(func(msg T) bool {
-		select {
-		case messages <- msg:
-			return true
-		case <-unsubscribe:
-			close(messages)
-			return false
-		}
-	})
-
-	go func() {
-		defer close(feed)
-
-		q := make([]T, 0, 1)
-		waiting := false
-
-		for {
-			select {
-			case m, more := <-messages:
-				if !more {
-					return
-				}
-
-				if waiting {
-					waiting = false
-					feed <- m
-				} else {
-					q = append(q, m)
-				}
-
-			case _, more := <-yieldReady:
-				if !more {
-					return
-				}
-
-				if len(q) > 0 {
-					waiting = false
-					feed <- q[0]
-					q = q[1:]
-				} else {
-					waiting = true
-				}
-			}
-		}
-	}()
-
-	return func(yield func(T) bool) {
-		defer close(unsubscribe)
-		defer close(yieldReady)
-
-		for {
-			yieldReady <- struct{}{}
-			if !yield(<-feed) {
-				return
-			}
-		}
-	}
-}
-
-type AsyncTopicOptions struct {
-	onClose     func()
-	onSubscribe func(count int)
-}
-
-type AsyncTopicOption func(*AsyncTopicOptions)
-
-func WithOnClose(fn func()) AsyncTopicOption {
-	return func(opts *AsyncTopicOptions) {
-		opts.onClose = fn
-	}
-}
-
-func WithOnSubscribe(fn func(count int)) AsyncTopicOption {
-	return func(opts *AsyncTopicOptions) {
-		opts.onSubscribe = fn
-	}
 }
