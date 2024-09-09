@@ -11,6 +11,8 @@ go get -u gitlab.com/naterciom/gubgub
 
 ## Example
 
+Ignoring errors for code brevity!
+
 ```Go
 package main
 
@@ -31,20 +33,16 @@ func consumer(msg MyMessage) {
 }
 
 func main() {
-	ctx, cancel := context.WithTimeout(context.TODO(), time.Second)
-	defer cancel()
+	topic := gubgub.NewAsyncTopic[MyMessage]()
+    defer topic.Close() // Returns after all messages are delivered
 
-	topic := gubgub.NewAsyncTopic[MyMessage](ctx)
-
-	topic.Subscribe(gubgub.Forever(consumer))
+	_ := topic.Subscribe(gubgub.Forever(consumer))
 
 	// The AsyncTopic doesn't wait for the subscriber to be registered so, for the purposes of this
 	// example, we sleep on it.
 	time.Sleep(time.Millisecond)
 
-	topic.Publish(MyMessage{Name: "John Smith"})
-
-	<-ctx.Done()
+	_ := topic.Publish(MyMessage{Name: "John Smith"}) // Returns immediately
 }
 ```
 ## Topics
