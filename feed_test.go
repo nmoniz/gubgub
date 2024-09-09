@@ -32,9 +32,12 @@ func TestFeed_Topics(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
+			feed, err := Feed(tc.topic, false)
+			require.NoError(t, err)
+
 			feedback := make(chan int)
 			go func() {
-				for i := range Feed(tc.topic, false) {
+				for i := range feed {
 					feedback <- i
 				}
 			}()
@@ -58,5 +61,4 @@ func TestFeed_Topics(t *testing.T) {
 			}
 		})
 	}
-
 }

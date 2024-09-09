@@ -11,7 +11,7 @@ go get -u gitlab.com/naterciom/gubgub
 
 ## Example
 
-Ignoring errors for code brevity!
+We'll be ignoring errors for code brevity!
 
 ```Go
 package main
@@ -32,22 +32,33 @@ func consumer(msg MyMessage) {
 	fmt.Printf("Hello %s", msg.Name)
 }
 
-func main() {
+func m2ain() {
 	topic := gubgub.NewAsyncTopic[MyMessage]()
-    defer topic.Close() // Returns after all messages are delivered
+	defer topic.Close() // Returns after all messages are delivered
 
-    _ := topic.Subscribe(gubgub.Forever(consumer))
+	_ = topic.Subscribe(gubgub.Forever(consumer))
 
 	// The AsyncTopic doesn't wait for the subscriber to be registered so, for the purposes of this
 	// example, we sleep on it.
 	time.Sleep(time.Millisecond)
 
-	_ := topic.Publish(MyMessage{Name: "John Smith"}) // Returns immediately
+	_ = topic.Publish(MyMessage{Name: "John Smith"}) // Returns immediately
 }
 ```
+
 ## Topics
 
-Topics are what this is all about. You publish to a topic and you subscribe to a topic. That is it.
+Topics are what this is all about. 
+You publish to a topic and you subscribe to a topic.
+That is it.
+
+A `Subscriber` is just a callback func. 
+A message is considered delivered when all subscribers have been called for that message and returned.
+
+If you `Publish` a message successfully (did not get an error) then you can be sure the message will be deliverd before any call to `Close` returns.
+
+Topics are meant to live as long as the application but you should call the `Close` method upon shutdown to fulfill the publishing promise.
+Use the `WithOnClose` option when creating the topic to perform any extra clean up you might need to do if the topic is closed.
 
 GubGub offers 2 kinds of topics:
 

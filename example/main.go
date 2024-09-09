@@ -15,14 +15,28 @@ func main() {
 	topic := gubgub.NewAsyncTopic[string]()
 	defer topic.Close()
 
-	topic.Subscribe(gubgub.Forever(UpperCaser))
+	err := topic.Subscribe(gubgub.Forever(UpperCaser))
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	topic.Subscribe(Countdown(3))
+	err = topic.Subscribe(Countdown(3))
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	topic.Subscribe(gubgub.Buffered(gubgub.Forever(Slow)))
+	err = topic.Subscribe(gubgub.Buffered(gubgub.Forever(Slow)))
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	go func() {
-		for s := range gubgub.Feed(topic, false) {
+		feed, err := gubgub.Feed(topic, false)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		for s := range feed {
 			log.Printf("ForRange: %s", s)
 		}
 	}()
@@ -35,6 +49,7 @@ func main() {
 		if err != nil {
 			log.Fatal(err)
 		}
+
 		topic.Publish(scanner.Text())
 	}
 }
