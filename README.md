@@ -36,7 +36,7 @@ func main() {
 	topic := gubgub.NewAsyncTopic[MyMessage]()
     defer topic.Close() // Returns after all messages are delivered
 
-	_ := topic.Subscribe(gubgub.Forever(consumer))
+    _ := topic.Subscribe(gubgub.Forever(consumer))
 
 	// The AsyncTopic doesn't wait for the subscriber to be registered so, for the purposes of this
 	// example, we sleep on it.
