@@ -17,11 +17,11 @@ type SyncTopic[T any] struct {
 	subscribers []Subscriber[T]
 }
 
-// NewSyncTopic creates a zero SyncTopic and return a pointer to it.
+// NewSyncTopic creates a SyncTopic with the specified options.
 func NewSyncTopic[T any](opts ...TopicOption) *SyncTopic[T] {
 	options := TopicOptions{
 		onClose:     func() {},
-		onSubscribe: func(count int) {},
+		onSubscribe: func() {},
 	}
 
 	for _, opt := range opts {
@@ -33,7 +33,7 @@ func NewSyncTopic[T any](opts ...TopicOption) *SyncTopic[T] {
 	}
 }
 
-// Close will cause future Publish and Subscribe calls to return an error.
+// Close will prevent further publishing and subscribing.
 func (t *SyncTopic[T]) Close() {
 	t.closed.Store(true)
 	t.options.onClose()
@@ -63,7 +63,7 @@ func (t *SyncTopic[T]) Subscribe(fn Subscriber[T]) error {
 	defer t.mu.Unlock()
 
 	t.subscribers = append(t.subscribers, fn)
-	t.options.onSubscribe(len(t.subscribers))
+	t.options.onSubscribe()
 
 	return nil
 }

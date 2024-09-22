@@ -69,3 +69,35 @@ func TestSyncTopic_MultiPublishersMultiSubscribers(t *testing.T) {
 
 	assert.Equal(t, msgCount*subCount, feedbackCounter)
 }
+
+func TestSyncTopic_ClosedTopicError(t *testing.T) {
+	testCases := []struct {
+		name     string
+		assertFn func(*SyncTopic[int])
+	}{
+		{
+			name: "publishing returns error",
+			assertFn: func(topic *SyncTopic[int]) {
+				assert.Error(t, ErrTopicClosed, topic.Publish(1))
+			},
+		},
+		{
+			name: "subscribing returns error",
+			assertFn: func(topic *SyncTopic[int]) {
+				assert.Error(t, ErrTopicClosed, topic.Subscribe(func(i int) bool { return true }))
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			feedback := make(chan struct{}, 1)
+			defer close(feedback)
+
+			topic := NewSyncTopic[int]()
+
+			topic.Close() // this should close the topic, no more messages can be published
+
+			tc.assertFn(topic)
+		})
+	}
+}
