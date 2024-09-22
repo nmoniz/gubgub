@@ -1,7 +1,6 @@
 package gubgub
 
 import (
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -98,47 +97,21 @@ func TestAsyncTopic_MultiPublishersMultiSubscribers(t *testing.T) {
 	}
 }
 
-func TestAsyncTopic_WithOnClose(t *testing.T) {
-	feedback := make(chan struct{}, 1)
-	defer close(feedback)
+func TestAsyncTopic_CloseIsIdempotent(t *testing.T) {
+	topic := NewAsyncTopic[int]()
 
-	topic := NewAsyncTopic[int](WithOnClose(func() { feedback <- struct{}{} }))
-
-	topic.Close()
+	feedback := make(chan struct{})
+	go func() {
+		topic.Close()
+		topic.Close()
+		close(feedback)
+	}()
 
 	select {
 	case <-feedback:
-		break
-
+		return
 	case <-testTimer(t, time.Second).C:
 		t.Fatalf("expected feedback by now")
-	}
-}
-
-func TestAsyncTopic_WithOnSubscribe(t *testing.T) {
-	const totalSub = 10
-
-	feedback := make(chan int, totalSub)
-	defer close(feedback)
-
-	topic := NewAsyncTopic[int](WithOnSubscribe(func(count int) { feedback <- count }))
-
-	for range totalSub {
-		topic.Subscribe(func(i int) bool { return true })
-	}
-
-	count := 0
-	timeout := testTimer(t, time.Second)
-
-	for count < totalSub {
-		select {
-		case c := <-feedback:
-			count++
-			assert.Equal(t, count, c, "expected %d but got %d instead", count, c)
-
-		case <-timeout.C:
-			t.Fatalf("expected %d feedback items by now but only got %d", totalSub, count)
-		}
 	}
 }
 
@@ -231,11 +204,10 @@ func withNotifyOnNthSubscriber(t testing.TB, n int64) (TopicOption, <-chan struc
 		close(notify)
 	})
 
-	var counter atomic.Int64
-
-	return WithOnSubscribe(func(count int) {
-		c := counter.Add(1)
-		if c == n {
+	var counter int64
+	return WithOnSubscribe(func() {
+		counter++
+		if counter == n {
 			notify <- struct{}{}
 		}
 	}), notify

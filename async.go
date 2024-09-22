@@ -6,12 +6,10 @@ import (
 )
 
 // AsyncTopic allows any message T to be broadcast to subscribers. Publishing as well as
-// subscribing happens asynchronously.
-// This guarantees that every published message will be delivered but does NOT guarantee delivery
-// order.
-// In the unlikely scenario where subscribers are being queued very aggressively it is possible
-// that some might never actually receive any message. Subscriber registration order is also not
-// guaranteed.
+// subscribing happens asynchronously (as non-blocking as possible).
+// Closing the topic guarantees that published message will be delivered and no further messages
+// nor subscribers will be accepted.
+// Delivery order is NOT guaranteed.
 type AsyncTopic[T any] struct {
 	options TopicOptions
 
@@ -23,12 +21,11 @@ type AsyncTopic[T any] struct {
 	subscribeCh chan Subscriber[T]
 }
 
-// NewAsyncTopic creates an AsyncTopic that will be closed when the given context is cancelled.
-// After closed calls to Publish or Subscribe will return an error.
+// NewAsyncTopic creates an AsyncTopic.
 func NewAsyncTopic[T any](opts ...TopicOption) *AsyncTopic[T] {
 	options := TopicOptions{
-		onClose:     func() {},          // Called after the Topic is closed and all messages have been delivered.
-		onSubscribe: func(count int) {}, // Called everytime a new subscriber is added
+		onClose:     func() {}, // Called after the Topic is closed and all messages have been delivered.
+		onSubscribe: func() {}, // Called everytime a new subscriber is added
 	}
 
 	for _, opt := range opts {
@@ -53,13 +50,19 @@ func (t *AsyncTopic[T]) Close() {
 	t.mu.RLock()
 	closing := t.closing
 	t.mu.RUnlock()
-
 	if closing {
 		// It's either already closed or it's closing.
 		return
 	}
 
 	t.mu.Lock()
+	if closing {
+		// It is possible that 2 go routines attempted to aquire the lock to close this topic.
+		t.mu.Unlock()
+		<-t.closed
+		return
+	}
+
 	t.closing = true // no more subscribing or publishing
 	t.mu.Unlock()
 
@@ -78,7 +81,7 @@ func (t *AsyncTopic[T]) run() {
 	defer func() {
 		// There is only one way to get here: the topic is now closing!
 		// Because both `subscribeCh` and `publishCh` channels are closed when the topic is closed
-		// this will always eventually return.
+		// we can assume this will always eventually return.
 		// This will deliver any potential queued message thus fulfilling the message delivery
 		// promise.
 		for msg := range t.publishCh {
@@ -94,7 +97,7 @@ func (t *AsyncTopic[T]) run() {
 			}
 
 			subscribers = append(subscribers, newCallback)
-			t.options.onSubscribe(len(subscribers))
+			t.options.onSubscribe()
 
 		case msg, more := <-t.publishCh:
 			if !more {
@@ -106,9 +109,11 @@ func (t *AsyncTopic[T]) run() {
 	}
 }
 
-// Publish broadcasts a msg to all subscribers.
+// Publish broadcasts a msg to all subscribers asynchronously.
 func (t *AsyncTopic[T]) Publish(msg T) error {
 	t.mu.RLock()
+
+	// We hold the Read lock until we are done with publishing to avoid panic due to a closed channel.
 
 	if t.closing {
 		t.mu.RUnlock()
@@ -123,7 +128,7 @@ func (t *AsyncTopic[T]) Publish(msg T) error {
 	return nil
 }
 
-// Subscribe adds a Subscriber func that will consume future published messages.
+// Subscribe registers a Subscriber func asynchronously.
 func (t *AsyncTopic[T]) Subscribe(fn Subscriber[T]) error {
 	t.mu.RLock()
 
