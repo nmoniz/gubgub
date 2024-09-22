@@ -13,7 +13,7 @@ func TestFeed_Topics(t *testing.T) {
 	subscriberReady := make(chan struct{}, 1)
 	defer close(subscriberReady)
 
-	onSubscribe := WithOnSubscribe(func(count int) {
+	onSubscribe := WithOnSubscribe(func() {
 		subscriberReady <- struct{}{}
 	})
 
