@@ -45,7 +45,7 @@ func NewAsyncTopic[T any](opts ...TopicOption) *AsyncTopic[T] {
 }
 
 // Close terminates background go routines and prevents further publishing and subscribing. All
-// published messages are garanteed to be delivered once Close returns. This is idempotent and
+// published messages are guaranteed to be delivered once Close returns. This is idempotent and
 // thread safe.
 func (t *AsyncTopic[T]) Close() {
 	t.mu.Lock()
