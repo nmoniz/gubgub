@@ -29,8 +29,11 @@ func NoOp[T any]() Subscriber[T] {
 // available memory.
 // This is useful if message publishing is surge prone and message processing is slow or
 // unpredictable (for example: subscriber makes network request).
+//
 // IMPORTANT: messages are considered delivered even it they are still in the buffer which means
-// that buffered subscribers are NOT COVERED by the publishing promise.
+// that while the wrapper subscriber is covered by the publishing promise the inner subscriber is
+// is not.
+//
 // Message average processing rate must still be higher than the average message publishing rate
 // otherwise it will eventually lead to memory issues. You will need to find a better strategy to
 // deal with such scenario.
@@ -89,7 +92,6 @@ func Buffered[T any](subscriber Subscriber[T]) Subscriber[T] {
 					idling = true
 				}
 			}
-
 		}
 	}()
 
