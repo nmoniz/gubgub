@@ -6,7 +6,7 @@ I started to develop what is now GubGub in one of my personal projects but I soo
 ## Getting started
 
 ```sh
-go get github.com/naterciom/gubgub@latest
+go get github.com/nmoniz/gubgub@latest
 ```
 
 ## Example
@@ -21,7 +21,7 @@ import (
  "fmt"
  "time"
 
- "github.com/naterciom/gubgub"
+ "github.com/nmoniz/gubgub"
 )
 
 type MyMessage struct {
@@ -52,10 +52,11 @@ Topics are what this is all about.
 You publish to a topic and you subscribe to a topic.
 That is it.
 
-A `Subscriber` is just a callback func.
-A message is considered delivered when all subscribers have been called for that message and returned.
+A `Subscriber` is just a callback `func` with a signature: `func[T any](message T) bool`.
+A `Subscriber` can unsubscribe by returning false.
+A `message` is considered delivered when all subscribers have been called and returned for that message.
 
-If you `Publish` a message successfully (did not get an error) then you can be sure the message will be deliverd before any call to `Close` returns.
+If you `Publish` a message successfully (did not get an error) then you can be sure the message will be delivered before any call to `Close` returns.
 
 Topics are meant to live as long as the application but you should call the `Close` method upon shutdown to fulfill the publishing promise.
 Use the `WithOnClose` option when creating the topic to perform any extra clean up you might need to do if the topic is closed.
@@ -67,17 +68,17 @@ GubGub offers 2 kinds of topics:
 
 * **AsyncTopic** - Publishing schedules the message to be eventually delivered.
   Subscribing schedules a subscriber to be eventually registered.
-  Only message delivery is garanteed.
+  Only message delivery is guaranteed.
 
 The type of topic does not relate to how messages are actually delivered.
-Currently we deliver messages sequenctially (each subscriber gets the message one after the other).
+Currently we deliver messages sequentially (each subscriber gets the message one after the other).
 
 ## Benchmarks
 
 * **SyncTopic** - Subscribers speed and number **will** have a direct impact the publishing performance.
   Under the right conditions (few and fast subscribers) this is the most performant topic.
 
-* **AsyncTopic** - Subscribers speed and number **will not** directly impact the publishing perfomance at the cost of some publishing overhead.
+* **AsyncTopic** - Subscribers speed and number **will not** directly impact the publishing performance at the cost of some publishing overhead.
   This is generally the most scalable topic.
 
 The following benchmarks are just for topic comparison regarding how the number of subscribers and their speed can impact the publishing performance:
