@@ -6,7 +6,7 @@ I started to develop what is now GubGub in one of my personal projects but I soo
 ## Getting started
 
 ```sh
-go get -u gitlab.com/naterciom/gubgub
+go get github.com/naterciom/gubgub@latest
 ```
 
 ## Example
@@ -17,42 +17,42 @@ We'll be ignoring errors for code brevity!
 package main
 
 import (
-	"context"
-	"fmt"
-	"time"
+ "context"
+ "fmt"
+ "time"
 
-	"gitlab.com/naterciom/gubgub"
+ "github.com/naterciom/gubgub"
 )
 
 type MyMessage struct {
-	Name string
+ Name string
 }
 
 func consumer(msg MyMessage) {
-	fmt.Printf("Hello %s", msg.Name)
+ fmt.Printf("Hello %s", msg.Name)
 }
 
 func main() {
-	topic := gubgub.NewAsyncTopic[MyMessage]()
-	defer topic.Close() // Returns after all messages are delivered
+ topic := gubgub.NewAsyncTopic[MyMessage]()
+ defer topic.Close() // Returns after all messages are delivered
 
-	_ = topic.Subscribe(gubgub.Forever(consumer))
+ _ = topic.Subscribe(gubgub.Forever(consumer))
 
-	// The AsyncTopic doesn't wait for the subscriber to be registered so, for the purposes of this
-	// example, we sleep on it.
-	time.Sleep(time.Millisecond)
+ // The AsyncTopic doesn't wait for the subscriber to be registered so, for the purposes of this
+ // example, we sleep on it.
+ time.Sleep(time.Millisecond)
 
-	_ = topic.Publish(MyMessage{Name: "John Smith"}) // Returns immediately
+ _ = topic.Publish(MyMessage{Name: "John Smith"}) // Returns immediately
 }
 ```
 
 ## Topics
 
-Topics are what this is all about. 
+Topics are what this is all about.
 You publish to a topic and you subscribe to a topic.
 That is it.
 
-A `Subscriber` is just a callback func. 
+A `Subscriber` is just a callback func.
 A message is considered delivered when all subscribers have been called for that message and returned.
 
 If you `Publish` a message successfully (did not get an error) then you can be sure the message will be deliverd before any call to `Close` returns.
@@ -62,37 +62,37 @@ Use the `WithOnClose` option when creating the topic to perform any extra clean 
 
 GubGub offers 2 kinds of topics:
 
-  * **SyncTopic** - Publishing blocks until the message was delivered to all subscribers. 
+* **SyncTopic** - Publishing blocks until the message was delivered to all subscribers.
   Subscribing blocks until the subscriber is registered.
 
-  * **AsyncTopic** - Publishing schedules the message to be eventually delivered.
+* **AsyncTopic** - Publishing schedules the message to be eventually delivered.
   Subscribing schedules a subscriber to be eventually registered.
   Only message delivery is garanteed.
 
-The type of topic does not relate to how messages are actually delivered. 
+The type of topic does not relate to how messages are actually delivered.
 Currently we deliver messages sequenctially (each subscriber gets the message one after the other).
 
 ## Benchmarks
 
-  * **SyncTopic** - Subscribers speed and number **will** have a direct impact the publishing performance.
+* **SyncTopic** - Subscribers speed and number **will** have a direct impact the publishing performance.
   Under the right conditions (few and fast subscribers) this is the most performant topic.
 
-  * **AsyncTopic** - Subscribers speed and number **will not** directly impact the publishing perfomance at the cost of some publishing overhead.
+* **AsyncTopic** - Subscribers speed and number **will not** directly impact the publishing perfomance at the cost of some publishing overhead.
   This is generally the most scalable topic.
 
 The following benchmarks are just for topic comparison regarding how the number of subscribers and their speed can impact the publishing performance:
 
 ```
-BenchmarkAsyncTopic_Publish/10_NoOp_Subscribers-8         	 2047338	       498.7 ns/op
-BenchmarkAsyncTopic_Publish/100_NoOp_Subscribers-8        	 3317646	       535.0 ns/op
-BenchmarkAsyncTopic_Publish/1K_NoOp_Subscribers-8         	 3239110	       578.9 ns/op
-BenchmarkAsyncTopic_Publish/10K_NoOp_Subscribers-8        	 1871702	       691.2 ns/op
-BenchmarkAsyncTopic_Publish/10_Slow_Subscribers-8         	 2615269	       433.4 ns/op
-BenchmarkAsyncTopic_Publish/20_Slow_Subscribers-8         	 3127874	       470.4 ns/op
-BenchmarkSyncTopic_Publish/10_NoOp_Subscribers-8          	24740354	        59.69 ns/op
-BenchmarkSyncTopic_Publish/100_NoOp_Subscribers-8         	 4135681	       488.9 ns/op
-BenchmarkSyncTopic_Publish/1K_NoOp_Subscribers-8          	  474122	      4320 ns/op
-BenchmarkSyncTopic_Publish/10K_NoOp_Subscribers-8         	   45790	     35583 ns/op
-BenchmarkSyncTopic_Publish/10_Slow_Subscribers-8          	  357253	      3393 ns/op
-BenchmarkSyncTopic_Publish/20_Slow_Subscribers-8          	  179725	      6688 ns/op
+BenchmarkAsyncTopic_Publish/10_NoOp_Subscribers-8           2047338        498.7 ns/op
+BenchmarkAsyncTopic_Publish/100_NoOp_Subscribers-8          3317646        535.0 ns/op
+BenchmarkAsyncTopic_Publish/1K_NoOp_Subscribers-8           3239110        578.9 ns/op
+BenchmarkAsyncTopic_Publish/10K_NoOp_Subscribers-8          1871702        691.2 ns/op
+BenchmarkAsyncTopic_Publish/10_Slow_Subscribers-8           2615269        433.4 ns/op
+BenchmarkAsyncTopic_Publish/20_Slow_Subscribers-8           3127874        470.4 ns/op
+BenchmarkSyncTopic_Publish/10_NoOp_Subscribers-8           24740354         59.69 ns/op
+BenchmarkSyncTopic_Publish/100_NoOp_Subscribers-8           4135681        488.9 ns/op
+BenchmarkSyncTopic_Publish/1K_NoOp_Subscribers-8             474122       4320 ns/op
+BenchmarkSyncTopic_Publish/10K_NoOp_Subscribers-8             45790      35583 ns/op
+BenchmarkSyncTopic_Publish/10_Slow_Subscribers-8             357253       3393 ns/op
+BenchmarkSyncTopic_Publish/20_Slow_Subscribers-8             179725       6688 ns/op
 ```

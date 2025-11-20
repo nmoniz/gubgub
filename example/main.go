@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"gitlab.com/naterciom/gubgub"
+	"github.com/nmoniz/gubgub"
 )
 
 func main() {
