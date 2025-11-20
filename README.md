@@ -1,5 +1,7 @@
 # GubGub
 
+[![Go Report Card](https://goreportcard.com/badge/github.com/nmoniz/gubgub)](https://goreportcard.com/report/github.com/nmoniz/gubgub)
+
 Yet another in-memory Go PubSub library.
 I started to develop what is now GubGub in one of my personal projects but I soon found myself using it in other completely unrelated projects and I thought it could be a nice thing to share.
 
