@@ -71,10 +71,15 @@ GubGub offers 2 kinds of topics:
 
 * **AsyncTopic** - Publishing schedules the message to be eventually delivered.
   Subscribing schedules a subscriber to be eventually registered.
-  Only message delivery is guaranteed.
+  Message delivery is guaranteed but not the order.
 
 The type of topic does not relate to how messages are actually delivered.
 Currently we deliver messages sequentially (each subscriber gets the message one after the other).
+
+## TODO
+
+* AsyncTopic guaranteed message order delivery
+* Parallel order delivery
 
 ## Benchmarks
 
