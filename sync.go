@@ -19,24 +19,17 @@ type SyncTopic[T any] struct {
 
 // NewSyncTopic creates a SyncTopic with the specified options.
 func NewSyncTopic[T any](opts ...TopicOption) *SyncTopic[T] {
-	options := TopicOptions{
-		onClose:     func() {},
-		onSubscribe: func() {},
-	}
+	t := &SyncTopic[T]{}
 
-	for _, opt := range opts {
-		opt(&options)
-	}
+	t.SetOptions(opts...)
 
-	return &SyncTopic[T]{
-		options: options,
-	}
+	return t
 }
 
 // Close will prevent further publishing and subscribing.
 func (t *SyncTopic[T]) Close() {
 	t.closed.Store(true)
-	t.options.onClose()
+	t.options.TriggerClose()
 }
 
 // Publish broadcasts a message to all subscribers.
@@ -63,7 +56,11 @@ func (t *SyncTopic[T]) Subscribe(fn Subscriber[T]) error {
 	defer t.mu.Unlock()
 
 	t.subscribers = append(t.subscribers, fn)
-	t.options.onSubscribe()
+	t.options.TriggerSubscribe()
 
 	return nil
+}
+
+func (t *SyncTopic[T]) SetOptions(opts ...TopicOption) {
+	t.options.Apply(opts...)
 }

@@ -7,6 +7,8 @@ type Subscriber[T any] func(T) bool
 type Topic[T any] interface {
 	Publishable[T]
 	Subscribable[T]
+	OptionsSetter
+	Closer
 }
 
 type Publishable[T any] interface {
@@ -15,4 +17,12 @@ type Publishable[T any] interface {
 
 type Subscribable[T any] interface {
 	Subscribe(Subscriber[T]) error
+}
+
+type OptionsSetter interface {
+	SetOptions(...TopicOption)
+}
+
+type Closer interface {
+	Close()
 }

@@ -7,6 +7,38 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func TestTriggerClose(t *testing.T) {
+	to := TopicOptions{}
+
+	var calls int
+	to.Apply(
+		WithOnClose(func() { calls++ }),
+		WithOnClose(func() { calls++ }),
+		WithOnClose(func() { calls++ }))
+
+	to.TriggerClose()
+
+	if calls != 3 {
+		t.Fatalf("wants 3 calls but got %d", calls)
+	}
+}
+
+func TestTriggerSubscribe(t *testing.T) {
+	to := TopicOptions{}
+
+	var calls int
+	to.Apply(
+		WithOnSubscribe(func() { calls++ }),
+		WithOnSubscribe(func() { calls++ }),
+		WithOnSubscribe(func() { calls++ }))
+
+	to.TriggerSubscribe()
+
+	if calls != 3 {
+		t.Fatalf("wants 3 calls but got %d", calls)
+	}
+}
+
 func TestWithOnClose(t *testing.T) {
 	type closable interface {
 		Close()

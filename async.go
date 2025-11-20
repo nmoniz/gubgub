@@ -23,21 +23,13 @@ type AsyncTopic[T any] struct {
 
 // NewAsyncTopic creates an AsyncTopic.
 func NewAsyncTopic[T any](opts ...TopicOption) *AsyncTopic[T] {
-	options := TopicOptions{
-		onClose:     func() {}, // Called after the Topic is closed and all messages have been delivered.
-		onSubscribe: func() {}, // Called everytime a new subscriber is added
-	}
-
-	for _, opt := range opts {
-		opt(&options)
-	}
-
 	t := AsyncTopic[T]{
-		options:     options,
 		closed:      make(chan struct{}),
 		publishCh:   make(chan T, 1),
 		subscribeCh: make(chan Subscriber[T], 1),
 	}
+
+	t.SetOptions(opts...)
 
 	go t.run()
 
@@ -68,7 +60,7 @@ func (t *AsyncTopic[T]) Close() {
 
 func (t *AsyncTopic[T]) run() {
 	defer close(t.closed)
-	defer t.options.onClose()
+	defer t.options.TriggerClose()
 
 	var subscribers []Subscriber[T]
 
@@ -91,7 +83,7 @@ func (t *AsyncTopic[T]) run() {
 			}
 
 			subscribers = append(subscribers, newCallback)
-			t.options.onSubscribe()
+			t.options.TriggerSubscribe()
 
 		case msg, more := <-t.publishCh:
 			if !more {
@@ -137,4 +129,8 @@ func (t *AsyncTopic[T]) Subscribe(fn Subscriber[T]) error {
 	}()
 
 	return nil
+}
+
+func (t *AsyncTopic[T]) SetOptions(opts ...TopicOption) {
+	t.options.Apply(opts...)
 }
